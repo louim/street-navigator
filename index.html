@@ -96,7 +96,7 @@
         display: flex;
         justify-content: space-between;
         z-index: 1;
-        margin-bottom: 10px;
+        /* Prevent double tap on buttons from zooming the interface */
         touch-action: manipulation;
       }
 
@@ -345,30 +345,28 @@
                 "line-cap": "round",
               },
               paint: {
-                "line-color": "hsl(0, 0%, 13%)",
-                "line-width": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  2,
-                  1,
-                  10,
-                  2,
-                ],
-                "line-dasharray": [0, 3],
+                "line-color": "#f00",
+                "line-width": 6,
               },
             });
 
+            map.loadImage("./triangle.png", function (error, image) {
+              if (error) throw error;
+              map.addImage("triangle", image, { sdf: true });
+            });
             map.addLayer({
               id: "triangles",
               type: "symbol",
               source: "sliced-route",
+              paint: {
+                "icon-color": "#f00",
+              },
               layout: {
                 "symbol-placement": "line",
-                "icon-image": "triangle_15",
-                "icon-size": 1.2,
-                "icon-offset": [0, -1],
+                "icon-image": "triangle",
+                "icon-size": 1.5,
                 "icon-rotate": 90,
+                "symbol-spacing": 100,
               },
             });
 

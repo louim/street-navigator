@@ -208,12 +208,11 @@
       const setCurrentSegment = (index, direction) => {
         index += direction;
         currentCoordinateIndex = index;
-        const lineString = loadedData.features[0].geometry;
-        const segment = lineString.coordinates.slice(index, index + 2);
+        const lineString = loadedData;
+        const segment = lineString.geometry.coordinates.slice(index, index + 2);
         const slicedLineString = turf.lineString(segment);
         const distance = turf.distance(segment[0], segment[1]);
-        const totalSegments =
-          loadedData.features[0].geometry.coordinates.length - 1;
+        const totalSegments = lineString.geometry.coordinates.length - 1;
         const currentSegment = currentCoordinateIndex + 1;
         // When you want to update the value, set it in local storage
         localStorage.setItem(
@@ -315,10 +314,11 @@
         fetch("./tracks.geojson")
           .then((response) => response.json())
           .then((data) => {
-            // Save the loaded data so we can use it later
-            loadedData = data;
-            const lineString = data.features[0].geometry;
-            const segment = lineString.coordinates.slice(
+            // Save the data we need to a variable.
+            // Clean up the coordinates to remove any unnecessary values
+            loadedData = turf.cleanCoords(data.features[0]);
+            const lineString = loadedData;
+            const segment = lineString.geometry.coordinates.slice(
               currentCoordinateIndex,
               currentCoordinateIndex + 2
             );

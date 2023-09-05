@@ -12,7 +12,9 @@
       rel="stylesheet"
       href="https://unpkg.com/maplibre-gl@3.3.1/dist/maplibre-gl.css"
     />
+    <link rel="stylesheet" href="https://unpkg.com/mvp.css" />
     <script src="https://unpkg.com/maplibre-gl@3.3.1/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <style>
       body {
         margin: 0;
@@ -24,17 +26,241 @@
         height: 100%;
       }
     </style>
+    <style>
+      .rounded-rect {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 0 50px -25px black;
+      }
+
+      .flex-center {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .flex-center.left {
+        left: 0px;
+      }
+
+      .sidebar-content {
+        position: absolute;
+        width: 95%;
+        height: 95%;
+      }
+
+      .sidebar-toggle {
+        position: absolute;
+        font-size: 32px;
+        width: 1.3em;
+        height: 1.3em;
+        overflow: visible;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .sidebar-toggle.left {
+        right: -1.5em;
+      }
+
+      .sidebar-toggle:hover {
+        color: #0aa1cf;
+        cursor: pointer;
+      }
+
+      .sidebar {
+        transition: transform 1s;
+        z-index: 1;
+        width: 300px;
+        height: 100%;
+      }
+
+      /*
+        The sidebar styling has them "expanded" by default, we use CSS transforms to push them offscreen
+        The toggleSidebar() function removes this class from the element in order to expand it.
+      */
+      .left.collapsed {
+        transform: translateX(-295px);
+      }
+
+      .right.collapsed {
+        transform: translateX(295px);
+      }
+      #bottom-buttons {
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        z-index: 1;
+        margin-bottom: 10px;
+        touch-action: manipulation;
+      }
+
+      #prev-button {
+        margin-left: 10px;
+      }
+
+      #next-button {
+        margin-right: 10px;
+      }
+    </style>
   </head>
   <body>
-    <div id="map"></div>
+    <div id="map">
+      <div id="left" class="sidebar flex-center left collapsed">
+        <div class="sidebar-content rounded-rect flex-center">
+          <h1>Controls</h1>
+          <section>
+            <p id="segment-info"></p>
+          </section>
+          <button onclick="hideRouteLayer()">Toggle Route Layer</button>
+          <button onclick="resetRoute()">Reset</button>
+          <div class="sidebar-toggle left" onclick="toggleSidebar('left')">
+            ➡️
+          </div>
+        </div>
+      </div>
+      <div id="bottom-buttons">
+        <button id="prev-button" onclick="prevCoordinate()">Previous</button>
+        <button id="next-button" onclick="nextCoordinate()">Next</button>
+      </div>
+    </div>
     <script>
+      const MAPTILER_KEY = "kifdubVOAmDvucf2pPDT";
+      // Initialize a variable to keep track of the current coordinate index
+      // Retrieve the value of currentCoordinateIndex from local storage
+      let currentCoordinateIndex = JSON.parse(
+        localStorage.getItem("currentCoordinateIndex")
+      );
+
+      // If the value is not present in local storage, initialize it to 0
+      if (currentCoordinateIndex === null) {
+        currentCoordinateIndex = 0;
+      }
+
+      let loadedData = {};
+      const hideRouteLayer = () => {
+        const visibility = map.getLayoutProperty("route", "visibility");
+        if (visibility === "visible" || visibility === undefined) {
+          map.setLayoutProperty("route", "visibility", "none");
+        } else {
+          map.setLayoutProperty("route", "visibility", "visible");
+        }
+      };
+      const toggleSidebar = (id) => {
+        const elem = document.getElementById(id);
+        const classes = elem.className.split(" ");
+        const collapsed = classes.indexOf("collapsed") !== -1;
+
+        const padding = {};
+
+        if (collapsed) {
+          // Replace the icon with an arrow pointing in the correct direction
+          elem.querySelector(".sidebar-toggle").innerHTML = "⬅️";
+          // Remove the 'collapsed' class from the class list of the element, this sets it back to the expanded state.
+          classes.splice(classes.indexOf("collapsed"), 1);
+
+          padding[id] = 300; // In px, matches the width of the sidebars set in .sidebar CSS class
+          map.easeTo({
+            padding,
+            duration: 1000, // In ms, CSS transition duration property for the sidebar matches this value
+          });
+        } else {
+          // Replace the icon with an arrow pointing in the correct direction
+          elem.querySelector(".sidebar-toggle").innerHTML = "➡️";
+          padding[id] = 0;
+          // Add the 'collapsed' class to the class list of the element
+          classes.push("collapsed");
+
+          map.easeTo({
+            padding,
+            duration: 1000,
+          });
+        }
+
+        // Update the class list on the element
+        elem.className = classes.join(" ");
+      };
+
+      const resetRoute = () => {
+        // Set the value of currentCoordinateIndex to 0
+        currentCoordinateIndex = 0;
+
+        // Update the value in local storage
+        localStorage.setItem("currentCoordinateIndex", currentCoordinateIndex);
+        setCurrentSegment(currentCoordinateIndex, 0);
+      };
+
+      // Function to update the map to show the previous coordinate
+      const prevCoordinate = () => {
+        setCurrentSegment(currentCoordinateIndex, -1);
+      };
+
+      // Function to update the map to show the next coordinate
+      const nextCoordinate = () => {
+        setCurrentSegment(currentCoordinateIndex, 1);
+      };
+
+      const setCurrentSegment = (index, direction) => {
+        index += direction;
+        currentCoordinateIndex = index;
+        const lineString = loadedData.features[0].geometry;
+        const segment = lineString.coordinates.slice(index, index + 2);
+        const slicedLineString = turf.lineString(segment);
+        const distance = turf.distance(segment[0], segment[1]);
+        const totalSegments =
+          loadedData.features[0].geometry.coordinates.length - 1;
+        const currentSegment = currentCoordinateIndex + 1;
+        // When you want to update the value, set it in local storage
+        localStorage.setItem(
+          "currentCoordinateIndex",
+          JSON.stringify(currentCoordinateIndex)
+        );
+        document.getElementById(
+          "segment-info"
+        ).innerHTML = `Segment ${currentSegment} of ${totalSegments}`;
+        // If the distance between the two points is less than 0.0001, skip to the next segment
+        if (distance < 0.0001 && direction === 1) {
+          console.log("skipping forward");
+          return nextCoordinate();
+        } else if (distance < 0.0001 && direction === -1) {
+          console.log("skipping backward");
+          return prevCoordinate();
+        }
+
+        // Create a new GeoJSON object with the sliced LineStrings
+        const slicedGeoJSON = {
+          type: "FeatureCollection",
+          features: [slicedLineString],
+        };
+
+        // Add the sliced GeoJSON object as a new source and layer
+        map.getSource("sliced-route").setData(slicedGeoJSON);
+        // Update the map camera to focus on the current segment
+        map.flyTo({
+          center: turf.center(slicedLineString).geometry.coordinates,
+          bearing: turf.bearing(
+            slicedLineString.geometry.coordinates[0],
+            slicedLineString.geometry.coordinates[1]
+          ),
+          zoom: 18,
+          speed: 0.3,
+        });
+      };
+
       const map = new maplibregl.Map({
         container: "map", // container id
-        style:
-          "https://api.maptiler.com/maps/streets/style.json?key=get_your_own_OpIi9ZULNHzrESv6T2vL",
+        style: `https://api.maptiler.com/maps/streets/style.json?key=${MAPTILER_KEY}`,
         center: [-71.2145, 46.8139],
+        pitch: 60,
         zoom: 12,
+        attributionControl: false,
       });
+      map.addControl(new maplibregl.AttributionControl(), "top-right");
 
       // Add geolocate control to the map.
       map.addControl(
@@ -48,6 +274,7 @@
       map.on("load", function () {
         map.addSource("route", {
           type: "geojson",
+          lineMetrics: true,
           data: "./tracks.geojson",
         });
 
@@ -56,10 +283,104 @@
           type: "line",
           source: "route",
           paint: {
-            "line-color": "#888",
-            "line-width": 2,
+            "line-color": "red",
+            "line-width": 8,
+            // 'line-gradient' must be specified using an expression
+            // with the special 'line-progress' property
+            "line-gradient": [
+              "interpolate",
+              ["linear"],
+              ["line-progress"],
+              0,
+              "blue",
+              0.1,
+              "royalblue",
+              0.3,
+              "cyan",
+              0.5,
+              "lime",
+              0.7,
+              "yellow",
+              1,
+              "red",
+            ],
+          },
+          layout: {
+            visibility: "none",
+            "line-cap": "round",
+            "line-join": "round",
           },
         });
+
+        fetch("./tracks.geojson")
+          .then((response) => response.json())
+          .then((data) => {
+            // Save the loaded data so we can use it later
+            loadedData = data;
+            const lineString = data.features[0].geometry;
+            const segment = lineString.coordinates.slice(
+              currentCoordinateIndex,
+              currentCoordinateIndex + 2
+            );
+            const slicedLineString = turf.lineString(segment);
+
+            // Create a new GeoJSON object with the sliced LineStrings
+            const slicedGeoJSON = {
+              type: "FeatureCollection",
+              features: [slicedLineString],
+            };
+
+            // Add the sliced GeoJSON object as a new source and layer
+            map.addSource("sliced-route", {
+              type: "geojson",
+              data: slicedGeoJSON,
+            });
+
+            map.addLayer({
+              id: "sliced-route",
+              type: "line",
+              source: "sliced-route",
+              layout: {
+                "line-join": "round",
+                "line-cap": "round",
+              },
+              paint: {
+                "line-color": "hsl(0, 0%, 13%)",
+                "line-width": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  2,
+                  1,
+                  10,
+                  2,
+                ],
+                "line-dasharray": [0, 3],
+              },
+            });
+
+            map.addLayer({
+              id: "triangles",
+              type: "symbol",
+              source: "sliced-route",
+              layout: {
+                "symbol-placement": "line",
+                "icon-image": "triangle_15",
+                "icon-size": 1.2,
+                "icon-offset": [0, -1],
+                "icon-rotate": 90,
+              },
+            });
+
+            map.flyTo({
+              center: turf.center(slicedLineString).geometry.coordinates,
+              bearing: turf.bearing(
+                slicedLineString.geometry.coordinates[0],
+                slicedLineString.geometry.coordinates[1]
+              ),
+              zoom: 18,
+            });
+          });
       });
     </script>
   </body>
